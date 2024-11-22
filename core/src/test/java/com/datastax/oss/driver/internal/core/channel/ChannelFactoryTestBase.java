@@ -27,6 +27,7 @@ import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
 import com.datastax.oss.driver.api.core.config.DriverConfig;
 import com.datastax.oss.driver.api.core.config.DriverExecutionProfile;
 import com.datastax.oss.driver.api.core.metadata.EndPoint;
+import com.datastax.oss.driver.api.core.metadata.Node;
 import com.datastax.oss.driver.internal.core.ProtocolVersionRegistry;
 import com.datastax.oss.driver.internal.core.TestResponses;
 import com.datastax.oss.driver.internal.core.context.EventBus;
@@ -97,6 +98,7 @@ public abstract class ChannelFactoryTestBase {
   @Mock ProtocolVersionRegistry protocolVersionRegistry;
   @Mock EventBus eventBus;
   @Mock Compressor<ByteBuf> compressor;
+  @Mock Node node;
 
   // The server's I/O thread will store the last received request here, and block until the test
   // thread retrieves it. This assumes readOutboundFrame() is called for each actual request, else

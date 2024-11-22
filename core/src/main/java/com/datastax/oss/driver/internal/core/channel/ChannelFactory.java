@@ -147,12 +147,12 @@ public class ChannelFactory {
     } else {
       nodeMetricUpdater = NoopNodeMetricUpdater.INSTANCE;
     }
-    return connect(node.getEndPoint(), options, nodeMetricUpdater);
+    return connect(node, options, nodeMetricUpdater);
   }
 
   @VisibleForTesting
   CompletionStage<DriverChannel> connect(
-      EndPoint endPoint, DriverChannelOptions options, NodeMetricUpdater nodeMetricUpdater) {
+      Node node, DriverChannelOptions options, NodeMetricUpdater nodeMetricUpdater) {
     CompletableFuture<DriverChannel> resultFuture = new CompletableFuture<>();
 
     ProtocolVersion currentVersion;
@@ -167,7 +167,7 @@ public class ChannelFactory {
     }
 
     connect(
-        endPoint,
+        node,
         options,
         nodeMetricUpdater,
         currentVersion,
@@ -178,7 +178,7 @@ public class ChannelFactory {
   }
 
   private void connect(
-      EndPoint endPoint,
+      Node node,
       DriverChannelOptions options,
       NodeMetricUpdater nodeMetricUpdater,
       ProtocolVersion currentVersion,
@@ -188,6 +188,7 @@ public class ChannelFactory {
 
     NettyOptions nettyOptions = context.getNettyOptions();
 
+    EndPoint endPoint = node.getEndPoint();
     Bootstrap bootstrap =
         new Bootstrap()
             .group(nettyOptions.ioEventLoopGroup())
@@ -204,8 +205,7 @@ public class ChannelFactory {
         cf -> {
           if (connectFuture.isSuccess()) {
             Channel channel = connectFuture.channel();
-            DriverChannel driverChannel =
-                new DriverChannel(endPoint, channel, context.getWriteCoalescer(), currentVersion);
+            DriverChannel driverChannel = new DriverChannel(node, channel, context, currentVersion);
             // If this is the first successful connection, remember the protocol version and
             // cluster name for future connections.
             if (isNegotiating) {
@@ -246,7 +246,7 @@ public class ChannelFactory {
                     currentVersion,
                     downgraded.get());
                 connect(
-                    endPoint,
+                    node,
                     options,
                     nodeMetricUpdater,
                     downgraded.get(),

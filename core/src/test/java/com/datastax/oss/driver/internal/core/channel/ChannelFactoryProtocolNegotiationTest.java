@@ -45,12 +45,12 @@ public class ChannelFactoryProtocolNegotiationTest extends ChannelFactoryTestBas
     when(defaultProfile.isDefined(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn(true);
     when(defaultProfile.getString(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn("V4");
     when(protocolVersionRegistry.fromName("V4")).thenReturn(DefaultProtocolVersion.V4);
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
 
     completeSimpleChannelInit();
 
@@ -67,12 +67,12 @@ public class ChannelFactoryProtocolNegotiationTest extends ChannelFactoryTestBas
     when(defaultProfile.isDefined(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn(true);
     when(defaultProfile.getString(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn("V4");
     when(protocolVersionRegistry.fromName("V4")).thenReturn(DefaultProtocolVersion.V4);
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
 
     Frame requestFrame = readOutboundFrame();
     assertThat(requestFrame.message).isInstanceOf(Options.class);
@@ -102,12 +102,12 @@ public class ChannelFactoryProtocolNegotiationTest extends ChannelFactoryTestBas
     when(defaultProfile.isDefined(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn(true);
     when(defaultProfile.getString(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn("V5");
     when(protocolVersionRegistry.fromName("V5")).thenReturn(DefaultProtocolVersion.V5);
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
 
     Frame requestFrame = readOutboundFrame();
     assertThat(requestFrame.message).isInstanceOf(Options.class);
@@ -139,12 +139,12 @@ public class ChannelFactoryProtocolNegotiationTest extends ChannelFactoryTestBas
     // Given
     when(defaultProfile.isDefined(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn(false);
     when(protocolVersionRegistry.highestNonBeta()).thenReturn(DefaultProtocolVersion.V4);
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
 
     Frame requestFrame = readOutboundFrame();
     assertThat(requestFrame.message).isInstanceOf(Options.class);
@@ -171,12 +171,12 @@ public class ChannelFactoryProtocolNegotiationTest extends ChannelFactoryTestBas
     when(protocolVersionRegistry.highestNonBeta()).thenReturn(DefaultProtocolVersion.V4);
     when(protocolVersionRegistry.downgrade(DefaultProtocolVersion.V4))
         .thenReturn(Optional.of(DefaultProtocolVersion.V3));
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
 
     Frame requestFrame = readOutboundFrame();
     assertThat(requestFrame.message).isInstanceOf(Options.class);
@@ -214,12 +214,12 @@ public class ChannelFactoryProtocolNegotiationTest extends ChannelFactoryTestBas
     when(protocolVersionRegistry.downgrade(DefaultProtocolVersion.V4))
         .thenReturn(Optional.of(DefaultProtocolVersion.V3));
     when(protocolVersionRegistry.downgrade(DefaultProtocolVersion.V3)).thenReturn(Optional.empty());
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
 
     Frame requestFrame = readOutboundFrame();
     assertThat(requestFrame.message).isInstanceOf(Options.class);

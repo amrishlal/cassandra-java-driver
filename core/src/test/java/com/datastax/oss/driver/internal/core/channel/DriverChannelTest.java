@@ -18,9 +18,12 @@
 package com.datastax.oss.driver.internal.core.channel;
 
 import static com.datastax.oss.driver.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 import com.datastax.oss.driver.api.core.DefaultProtocolVersion;
 import com.datastax.oss.driver.api.core.connection.ClosedConnectionException;
+import com.datastax.oss.driver.api.core.metadata.Node;
+import com.datastax.oss.driver.internal.core.context.InternalDriverContext;
 import com.datastax.oss.protocol.internal.Frame;
 import com.datastax.oss.protocol.internal.request.Query;
 import com.datastax.oss.protocol.internal.response.result.Void;
@@ -44,6 +47,8 @@ public class DriverChannelTest extends ChannelHandlerTestBase {
   private MockWriteCoalescer writeCoalescer;
 
   @Mock private StreamIdGenerator streamIds;
+  @Mock private InternalDriverContext context;
+  @Mock private Node node;
 
   @Before
   @Override
@@ -62,9 +67,9 @@ public class DriverChannelTest extends ChannelHandlerTestBase {
                 null,
                 "test"));
     writeCoalescer = new MockWriteCoalescer();
-    driverChannel =
-        new DriverChannel(
-            new EmbeddedEndPoint(), channel, writeCoalescer, DefaultProtocolVersion.V3);
+    when(context.getWriteCoalescer()).thenReturn(writeCoalescer);
+    when(node.getEndPoint()).thenReturn(new EmbeddedEndPoint());
+    driverChannel = new DriverChannel(node, channel, context, DefaultProtocolVersion.V3);
   }
 
   /**

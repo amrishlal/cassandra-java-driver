@@ -19,11 +19,13 @@ package com.datastax.oss.driver.internal.core.channel;
 
 import com.datastax.oss.driver.api.core.CqlIdentifier;
 import com.datastax.oss.driver.api.core.ProtocolVersion;
+import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
 import com.datastax.oss.driver.api.core.connection.BusyConnectionException;
 import com.datastax.oss.driver.api.core.metadata.EndPoint;
 import com.datastax.oss.driver.api.core.metadata.Node;
 import com.datastax.oss.driver.internal.core.adminrequest.AdminRequestHandler;
 import com.datastax.oss.driver.internal.core.adminrequest.ThrottledAdminRequestHandler;
+import com.datastax.oss.driver.internal.core.context.InternalDriverContext;
 import com.datastax.oss.driver.internal.core.pool.ChannelPool;
 import com.datastax.oss.driver.internal.core.session.DefaultSession;
 import com.datastax.oss.driver.internal.core.util.concurrent.UncaughtExceptions;
@@ -59,24 +61,41 @@ public class DriverChannel {
   @SuppressWarnings("RedundantStringConstructorCall")
   static final Object FORCEFUL_CLOSE_MESSAGE = new String("FORCEFUL_CLOSE_MESSAGE");
 
-  private final EndPoint endPoint;
+  private final Node node;
   private final Channel channel;
   private final InFlightHandler inFlightHandler;
+  private final InternalDriverContext context;
   private final WriteCoalescer writeCoalescer;
   private final ProtocolVersion protocolVersion;
   private final AtomicBoolean closing = new AtomicBoolean();
   private final AtomicBoolean forceClosing = new AtomicBoolean();
+  private final long creationTimestamp;
+  private final long maxRecycleTimeMillis;
+  private long writeCount;
+  private long maxWriteCount;
 
   DriverChannel(
-      EndPoint endPoint,
-      Channel channel,
-      WriteCoalescer writeCoalescer,
-      ProtocolVersion protocolVersion) {
-    this.endPoint = endPoint;
+      Node node, Channel channel, InternalDriverContext context, ProtocolVersion protocolVersion) {
+    this.node = node;
     this.channel = channel;
     this.inFlightHandler = channel.pipeline().get(InFlightHandler.class);
-    this.writeCoalescer = writeCoalescer;
+    this.context = context;
+    this.writeCoalescer = context.getWriteCoalescer();
     this.protocolVersion = protocolVersion;
+    this.writeCount = 0L;
+    this.maxWriteCount =
+        context
+            .getConfig()
+            .getDefaultProfile()
+            .getDuration(DefaultDriverOption.CONNECTION_RECYCLE_TIME)
+            .toMillis();
+    this.creationTimestamp = System.currentTimeMillis();
+    this.maxRecycleTimeMillis =
+        context
+            .getConfig()
+            .getDefaultProfile()
+            .getDuration(DefaultDriverOption.CONNECTION_RECYCLE_TIME)
+            .toMillis();
   }
 
   /**
@@ -92,6 +111,12 @@ public class DriverChannel {
       return channel.newFailedFuture(new IllegalStateException("Driver channel is closing"));
     }
     RequestMessage message = new RequestMessage(request, tracing, customPayload, responseCallback);
+    ++writeCount;
+    if (writeCount >= maxWriteCount) {
+      context.getEventBus().fire(ChannelRecycleEvent.recycleCountExpired(node));
+    } else if (System.currentTimeMillis() >= creationTimestamp + maxRecycleTimeMillis) {
+      context.getEventBus().fire(ChannelRecycleEvent.recycleCountExpired(node));
+    }
     return writeCoalescer.writeAndFlush(channel, message);
   }
 
@@ -205,7 +230,7 @@ public class DriverChannel {
 
   /** The endpoint that was used to establish the connection. */
   public EndPoint getEndPoint() {
-    return endPoint;
+    return node.getEndPoint();
   }
 
   public SocketAddress localAddress() {
@@ -215,6 +240,12 @@ public class DriverChannel {
   /** @return The {@link ChannelConfig configuration} of this channel. */
   public ChannelConfig config() {
     return channel.config();
+  }
+
+  /** @return true if channel has expired and needs to be recycled, otherwise false. */
+  public boolean hasExpired() {
+    return (writeCount >= maxWriteCount
+        || System.currentTimeMillis() >= creationTimestamp + maxRecycleTimeMillis);
   }
 
   /**

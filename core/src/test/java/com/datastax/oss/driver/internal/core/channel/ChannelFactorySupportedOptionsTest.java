@@ -36,12 +36,12 @@ public class ChannelFactorySupportedOptionsTest extends ChannelFactoryTestBase {
     // Given
     when(defaultProfile.isDefined(DefaultDriverOption.PROTOCOL_VERSION)).thenReturn(false);
     when(protocolVersionRegistry.highestNonBeta()).thenReturn(DefaultProtocolVersion.V4);
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
     ChannelFactory factory = newChannelFactory();
 
     // When
     CompletionStage<DriverChannel> channelFuture1 =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
     writeInboundFrame(
         readOutboundFrame(), TestResponses.supportedResponse("mock_key", "mock_value"));
     writeInboundFrame(readOutboundFrame(), new Ready());
@@ -55,8 +55,7 @@ public class ChannelFactorySupportedOptionsTest extends ChannelFactoryTestBase {
 
     // When
     CompletionStage<DriverChannel> channelFuture2 =
-        factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
+        factory.connect(node, DriverChannelOptions.DEFAULT, NoopNodeMetricUpdater.INSTANCE);
     writeInboundFrame(readOutboundFrame(), new Ready());
     writeInboundFrame(readOutboundFrame(), TestResponses.clusterNameResponse("mockClusterName"));
 

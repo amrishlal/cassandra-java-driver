@@ -988,7 +988,23 @@ public enum DefaultDriverOption implements DriverOption {
    * <p>Value type: {@link java.util.List List}&#60;{@link String}&#62;
    */
   LOAD_BALANCING_DC_FAILOVER_PREFERRED_REMOTE_DCS(
-      "advanced.load-balancing-policy.dc-failover.preferred-remote-dcs");
+      "advanced.load-balancing-policy.dc-failover.preferred-remote-dcs"),
+
+  /**
+   * The number of milliseconds before connection is recycled. A negative value indicates that there
+   * is no set time for connection to be recycled.
+   *
+   * <p>Value-type: long
+   */
+  CONNECTION_RECYCLE_TIME("advanced.connection.pool.recycle.time"),
+
+  /**
+   * The number of write operations before connection is recycled. A negative value indicates that
+   * there is no set write count for connection to be recycled.
+   *
+   * <p>Value-type: int
+   */
+  CONNECTION_RECYCLE_COUNT("advanced.connection.pool.max.recycle.count");
 
   private final String path;
 

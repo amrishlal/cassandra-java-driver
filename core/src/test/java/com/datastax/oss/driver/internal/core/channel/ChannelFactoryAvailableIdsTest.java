@@ -51,6 +51,8 @@ public class ChannelFactoryAvailableIdsTest extends ChannelFactoryTestBase {
     when(defaultProfile.getInt(DefaultDriverOption.CONNECTION_MAX_REQUESTS)).thenReturn(128);
 
     when(responseCallback.isLastResponse(any(Frame.class))).thenReturn(true);
+
+    when(node.getEndPoint()).thenReturn(SERVER_ADDRESS);
   }
 
   @Test
@@ -61,7 +63,7 @@ public class ChannelFactoryAvailableIdsTest extends ChannelFactoryTestBase {
     // When
     CompletionStage<DriverChannel> channelFuture =
         factory.connect(
-            SERVER_ADDRESS, DriverChannelOptions.builder().build(), NoopNodeMetricUpdater.INSTANCE);
+            node, DriverChannelOptions.builder().build(), NoopNodeMetricUpdater.INSTANCE);
     completeSimpleChannelInit();
 
     // Then

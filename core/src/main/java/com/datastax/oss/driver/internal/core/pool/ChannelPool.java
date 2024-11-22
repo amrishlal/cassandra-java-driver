@@ -30,6 +30,7 @@ import com.datastax.oss.driver.api.core.metadata.Node;
 import com.datastax.oss.driver.api.core.metrics.DefaultNodeMetric;
 import com.datastax.oss.driver.internal.core.channel.ChannelEvent;
 import com.datastax.oss.driver.internal.core.channel.ChannelFactory;
+import com.datastax.oss.driver.internal.core.channel.ChannelRecycleEvent;
 import com.datastax.oss.driver.internal.core.channel.ClusterNameMismatchException;
 import com.datastax.oss.driver.internal.core.channel.DriverChannel;
 import com.datastax.oss.driver.internal.core.channel.DriverChannelOptions;
@@ -233,6 +234,7 @@ public class ChannelPool implements AsyncAutoCloseable {
     private final Set<DriverChannel> closingChannels = new HashSet<>();
     private final Reconnection reconnection;
     private final Object configListenerKey;
+    private final Object recycleListenerKey;
 
     private NodeDistance distance;
     private int wantedCount;
@@ -264,6 +266,9 @@ public class ChannelPool implements AsyncAutoCloseable {
       this.configListenerKey =
           eventBus.register(
               ConfigChangeEvent.class, RunOrSchedule.on(adminExecutor, this::onConfigChanged));
+      this.recycleListenerKey =
+          eventBus.register(
+              ChannelRecycleEvent.class, RunOrSchedule.on(adminExecutor, this::onRecycle));
     }
 
     private void connect() {
@@ -474,6 +479,23 @@ public class ChannelPool implements AsyncAutoCloseable {
       resize(distance);
     }
 
+    private void onRecycle(@SuppressWarnings("unused") ChannelRecycleEvent event) {
+      assert adminExecutor.inEventLoop();
+      LOG.debug("[{}] Recycling channels that have expired", logPrefix);
+      Set<DriverChannel> toRemove = Sets.newHashSet();
+      for (DriverChannel channel : channels) {
+        if (channel.hasExpired()) {
+          toRemove.add(channel);
+        }
+      }
+      for (DriverChannel channel : toRemove) {
+        channels.remove(channel);
+        channel.close();
+        eventBus.fire(ChannelEvent.channelClosed(node));
+      }
+      reconnection.start();
+    }
+
     private CompletionStage<Void> setKeyspace(CqlIdentifier newKeyspaceName) {
       assert adminExecutor.inEventLoop();
       if (setKeyspaceFuture != null && !setKeyspaceFuture.isDone()) {
@@ -533,6 +555,7 @@ public class ChannelPool implements AsyncAutoCloseable {
       reconnection.stop();
 
       eventBus.unregister(configListenerKey, ConfigChangeEvent.class);
+      eventBus.unregister(recycleListenerKey, ChannelRecycleEvent.class);
 
       // Close all channels, the pool future completes when all the channels futures have completed
       int toClose = closingChannels.size() + channels.size();
