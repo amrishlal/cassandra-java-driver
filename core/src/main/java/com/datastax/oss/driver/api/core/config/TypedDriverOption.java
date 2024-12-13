@@ -902,6 +902,20 @@ public class TypedDriverOption<ValueT> {
               DefaultDriverOption.LOAD_BALANCING_DC_FAILOVER_PREFERRED_REMOTE_DCS,
               GenericType.listOf(String.class));
 
+  /**
+   * The number of milliseconds before connection is recycled. A value of zero or less means
+   * connections won't be recycled based on time duration.
+   */
+  public static final TypedDriverOption<Long> CONNECTION_RECYCLE_TIME =
+      new TypedDriverOption<>(DefaultDriverOption.CONNECTION_RECYCLE_TIME, GenericType.LONG);
+
+  /**
+   * The number of write operations before connection is recycled. A value of zero or less means
+   * that connections won't be recycled based on write count.
+   */
+  public static final TypedDriverOption<Integer> CONNECTION_RECYCLE_COUNT =
+      new TypedDriverOption<>(DefaultDriverOption.CONNECTION_RECYCLE_COUNT, GenericType.INTEGER);
+
   private static Iterable<TypedDriverOption<?>> introspectBuiltInValues() {
     try {
       ImmutableList.Builder<TypedDriverOption<?>> result = ImmutableList.builder();

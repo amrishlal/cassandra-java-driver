@@ -1004,7 +1004,7 @@ public enum DefaultDriverOption implements DriverOption {
    *
    * <p>Value-type: int
    */
-  CONNECTION_RECYCLE_COUNT("advanced.connection.pool.max.recycle.count");
+  CONNECTION_RECYCLE_COUNT("advanced.connection.pool.recycle.count");
 
   private final String path;
 

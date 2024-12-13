@@ -29,6 +29,7 @@ import com.datastax.oss.driver.internal.core.context.InternalDriverContext;
 import com.datastax.oss.driver.internal.core.pool.ChannelPool;
 import com.datastax.oss.driver.internal.core.session.DefaultSession;
 import com.datastax.oss.driver.internal.core.util.concurrent.UncaughtExceptions;
+import com.datastax.oss.driver.shaded.guava.common.annotations.VisibleForTesting;
 import com.datastax.oss.protocol.internal.Message;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
@@ -69,10 +70,10 @@ public class DriverChannel {
   private final ProtocolVersion protocolVersion;
   private final AtomicBoolean closing = new AtomicBoolean();
   private final AtomicBoolean forceClosing = new AtomicBoolean();
-  private final long creationTimestamp;
+  private long channelCreateTime;
   private final long maxRecycleTimeMillis;
-  private long writeCount;
-  private long maxWriteCount;
+  private long currentWriteCount;
+  private final long maxWriteCount;
 
   DriverChannel(
       Node node, Channel channel, InternalDriverContext context, ProtocolVersion protocolVersion) {
@@ -82,14 +83,13 @@ public class DriverChannel {
     this.context = context;
     this.writeCoalescer = context.getWriteCoalescer();
     this.protocolVersion = protocolVersion;
-    this.writeCount = 0L;
+    this.currentWriteCount = 0L;
     this.maxWriteCount =
         context
             .getConfig()
             .getDefaultProfile()
-            .getDuration(DefaultDriverOption.CONNECTION_RECYCLE_TIME)
-            .toMillis();
-    this.creationTimestamp = System.currentTimeMillis();
+            .getLong(DefaultDriverOption.CONNECTION_RECYCLE_COUNT);
+    this.channelCreateTime = System.currentTimeMillis();
     this.maxRecycleTimeMillis =
         context
             .getConfig()
@@ -111,12 +111,24 @@ public class DriverChannel {
       return channel.newFailedFuture(new IllegalStateException("Driver channel is closing"));
     }
     RequestMessage message = new RequestMessage(request, tracing, customPayload, responseCallback);
-    ++writeCount;
-    if (writeCount >= maxWriteCount) {
-      context.getEventBus().fire(ChannelRecycleEvent.recycleCountExpired(node));
-    } else if (System.currentTimeMillis() >= creationTimestamp + maxRecycleTimeMillis) {
-      context.getEventBus().fire(ChannelRecycleEvent.recycleCountExpired(node));
+
+    if (maxWriteCount > 0) {
+      // If maxWriteCount is greater than zero, then fire ChannelRecycleEvent upon exceeding
+      // maxWriteCount.
+      ++currentWriteCount;
+      if (currentWriteCount >= maxWriteCount) {
+        context.getEventBus().fire(ChannelRecycleEvent.recycleCountExpired(node));
+      }
     }
+
+    if (maxRecycleTimeMillis > 0) {
+      // If maxRecycleTimeMillis is greater than zero, then fire ChannelRecycleEvent upon exceeding
+      // maxRecycleTimeMillis.
+      if (System.currentTimeMillis() >= channelCreateTime + maxRecycleTimeMillis) {
+        context.getEventBus().fire(ChannelRecycleEvent.recycleCountExpired(node));
+      }
+    }
+
     return writeCoalescer.writeAndFlush(channel, message);
   }
 
@@ -244,8 +256,14 @@ public class DriverChannel {
 
   /** @return true if channel has expired and needs to be recycled, otherwise false. */
   public boolean hasExpired() {
-    return (writeCount >= maxWriteCount
-        || System.currentTimeMillis() >= creationTimestamp + maxRecycleTimeMillis);
+    return (currentWriteCount >= maxWriteCount
+        || System.currentTimeMillis() >= channelCreateTime + maxRecycleTimeMillis);
+  }
+
+  @VisibleForTesting
+  void resetExpiry() {
+    currentWriteCount = 0;
+    channelCreateTime = System.currentTimeMillis();
   }
 
   /**

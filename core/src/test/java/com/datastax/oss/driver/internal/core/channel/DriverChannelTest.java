@@ -18,11 +18,16 @@
 package com.datastax.oss.driver.internal.core.channel;
 
 import static com.datastax.oss.driver.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.datastax.oss.driver.api.core.DefaultProtocolVersion;
+import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
+import com.datastax.oss.driver.api.core.config.DriverConfig;
+import com.datastax.oss.driver.api.core.config.DriverExecutionProfile;
 import com.datastax.oss.driver.api.core.connection.ClosedConnectionException;
 import com.datastax.oss.driver.api.core.metadata.Node;
+import com.datastax.oss.driver.internal.core.context.EventBus;
 import com.datastax.oss.driver.internal.core.context.InternalDriverContext;
 import com.datastax.oss.protocol.internal.Frame;
 import com.datastax.oss.protocol.internal.request.Query;
@@ -31,10 +36,12 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.concurrent.Future;
+import java.time.Duration;
 import java.util.AbstractMap;
 import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -45,9 +52,11 @@ public class DriverChannelTest extends ChannelHandlerTestBase {
 
   private DriverChannel driverChannel;
   private MockWriteCoalescer writeCoalescer;
+  private EventBus eventBus;
 
   @Mock private StreamIdGenerator streamIds;
   @Mock private InternalDriverContext context;
+  @Mock DriverConfig config;
   @Mock private Node node;
 
   @Before
@@ -68,6 +77,17 @@ public class DriverChannelTest extends ChannelHandlerTestBase {
                 "test"));
     writeCoalescer = new MockWriteCoalescer();
     when(context.getWriteCoalescer()).thenReturn(writeCoalescer);
+
+    DriverExecutionProfile defaultProfile = mock(DriverExecutionProfile.class);
+    when(defaultProfile.getLong(DefaultDriverOption.CONNECTION_RECYCLE_COUNT)).thenReturn(10L);
+    when(defaultProfile.getDuration(DefaultDriverOption.CONNECTION_RECYCLE_TIME))
+        .thenReturn(Duration.ofMillis(500));
+    when(config.getDefaultProfile()).thenReturn(defaultProfile);
+    when(context.getConfig()).thenReturn(config);
+
+    eventBus = new EventBus("test");
+    when(context.getEventBus()).thenReturn(eventBus);
+
     when(node.getEndPoint()).thenReturn(new EmbeddedEndPoint());
     driverChannel = new DriverChannel(node, channel, context, DefaultProtocolVersion.V3);
   }
@@ -146,6 +166,67 @@ public class DriverChannelTest extends ChannelHandlerTestBase {
     assertThat(responseCallback.getFailure())
         .isInstanceOf(ClosedConnectionException.class)
         .hasMessageContaining("Channel was force-closed");
+  }
+
+  /** Check that DriverChannel expires after CONNECTION_RECYCLE_COUNT limit is reached. */
+  @Test
+  public void should_throw_event_when_max_write_count_is_exceeded() {
+    MockResponseCallback responseCallback = new MockResponseCallback();
+    Object eventRegistrationKey = null;
+    try {
+      // Register listener for ChannelRecycleEvent.
+      AtomicBoolean channelRecycleEventReceived = new AtomicBoolean(false);
+      eventRegistrationKey =
+          eventBus.register(
+              ChannelRecycleEvent.class,
+              e -> {
+                channelRecycleEventReceived.set(true);
+              });
+
+      // Carry out write operations to exceed CONNECTION_RECYCLE_COUNT limit.
+      driverChannel.resetExpiry();
+      for (int i = 0; i < 15; i++) {
+        driverChannel.write(new Query("test"), false, Frame.NO_PAYLOAD, responseCallback);
+      }
+      writeCoalescer.triggerFlush();
+
+      // Check that DriverChannel expiry flag got set and ChannelRecycleEvent was fired.
+      assertThat(driverChannel.hasExpired()).isEqualTo(true);
+      assertThat(channelRecycleEventReceived.get()).isEqualTo(true);
+    } finally {
+      eventBus.unregister(eventRegistrationKey, ChannelRecycleEvent.class);
+    }
+  }
+
+  /** Check that DriverChannel expires after CONNECTION_RECYCLE_TIME limit is reached. */
+  @Test
+  public void should_throw_event_when_max_write_time_is_exceeded() throws InterruptedException {
+    MockResponseCallback responseCallback = new MockResponseCallback();
+    Object eventRegistrationKey = null;
+    try {
+      // Register listener for ChannelRecycleEvent.
+      AtomicBoolean channelRecycleEventReceived = new AtomicBoolean(false);
+      eventRegistrationKey =
+          eventBus.register(
+              ChannelRecycleEvent.class,
+              e -> {
+                channelRecycleEventReceived.set(true);
+              });
+
+      // Wait 1000 millisecond before writing so that CONNECTION_RECYCLE_TIME limit is reached.
+      driverChannel.resetExpiry();
+      Thread.sleep(1000);
+
+      // Write operation should now exceed CONNECTION_RECYCLE_TIME limit.
+      driverChannel.write(new Query("test"), false, Frame.NO_PAYLOAD, responseCallback);
+      writeCoalescer.triggerFlush();
+
+      // Check that DriverChannel expiry flag got set and ChannelRecycleEvent was fired.
+      assertThat(driverChannel.hasExpired()).isEqualTo(true);
+      assertThat(channelRecycleEventReceived.get()).isEqualTo(true);
+    } finally {
+      eventBus.unregister(eventRegistrationKey, ChannelRecycleEvent.class);
+    }
   }
 
   // Simple implementation that holds all the writes, and flushes them when it's explicitly
